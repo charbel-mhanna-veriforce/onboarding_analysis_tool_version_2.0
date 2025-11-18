@@ -1,0 +1,5 @@
+id,name_en,name_fr,old_names,address,postal_code,country,email,modules,registration_code,hiring_client_names
+1,Alpha Construction,Alpha Construction FR,,123 Main St,A1A1A1,CA,contact@alphacorp.com,core;env,Active,clienta;clientb
+2,Beta Services,Beta Services FR,Old Beta;Beta Inc,456 Side Rd,B2B2B2,CA,info@betaservices.com,safety,Active,clientb
+3,Gamma Industrial,Gamma Industrial FR,,789 Plant Way,C3C3C3,US,sales@gamma-industrial.com,core,Suspended,clientc
+

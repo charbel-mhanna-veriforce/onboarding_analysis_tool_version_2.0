@@ -1,0 +1,5 @@
+contractor_name,contact_email,address,postal_code,country_iso2,hiring_client_name,is_take_over,ambiguous
+Alpha Construction,contact@alphacorp.com,123 Main St,A1A1A1,CA,clienta,false,false
+Beta Services,hr@betaservices.com,456 Side Rd,B2B2B2,CA,clientb,false,false
+Unknown Contractor,someone@gmail.com,999 Mystery Ave,Z9Z9Z9,US,clientx,false,true
+
