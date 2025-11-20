@@ -48,6 +48,94 @@ def update_job(job_id: str, **kwargs):
 # CONSTANTS & HELPERS (ported/adapted from legacy script)
 # -------------------------------------------------------------------
 
+# Legacy analysis headers (same as old script)
+# Legacy analysis headers (exact order from old script / sample Excel)
+ANALYSIS_HEADERS = [
+    "cbx_id",
+    "hc_contractor_summary",
+    "analysis",
+    "cbx_contractor",
+    "cbx_street",
+    "cbx_city",
+    "cbx_state",
+    "cbx_zip",
+    "cbx_country",
+    "cbx_expiration_date",
+    "registration_status",
+    "suspended",
+    "cbx_email",
+    "cbx_first_name",
+    "cbx_last_name",
+    "modules",
+    "cbx_account_type",
+    "cbx_subscription_fee",
+    "cbx_employee_price",
+    "parents",
+    "previous",
+    "hiring_client_names",
+    "hiring_client_count",
+    "is_in_relationship",
+    "is_qualified",
+    "ratio_company",
+    "ratio_address",
+    "contact_match",
+    "cbx_assessment_level",
+    "new_product",
+    "generic_domain",
+    "match_count",
+    "match_count_with_hc",
+    "is_subscription_upgrade",
+    "upgrade_price",
+    "prorated_upgrade_price",
+    "create_in_cbx",
+    "action",
+    "index",
+]
+
+
+# How our internal column names map to the legacy analysis headers
+INTERNAL_ANALYSIS_MAP = {
+    "cbx_id": "cbx_id",
+    "hc_contractor_summary": "hc_contractor_summary",
+    "analysis": "analysis",
+    "cbx_contractor": "company",              # old 'company'
+    "cbx_street": "address",
+    "cbx_city": "city",
+    "cbx_state": "state",
+    "cbx_zip": "zip",
+    "cbx_country": "country",
+    "cbx_expiration_date": "expiration_date",
+    "registration_status": "registration_status",
+    "suspended": "suspended",
+    "cbx_email": "email",
+    "cbx_first_name": "first_name",
+    "cbx_last_name": "last_name",
+    "modules": "modules",
+    "cbx_account_type": "account_type",
+    "cbx_subscription_fee": "subscription_price",
+    "cbx_employee_price": "employee_price",
+    "parents": "parents",
+    "previous": "previous",
+    "hiring_client_names": "hiring_client_names",
+    "hiring_client_count": "hiring_client_count",
+    "is_in_relationship": "is_in_relationship",
+    "is_qualified": "is_qualified",
+    "ratio_company": "ratio_company",
+    "ratio_address": "ratio_address",
+    "contact_match": "contact_match",
+    "cbx_assessment_level": "cbx_assessment_level",
+    "new_product": "new_product",
+    "generic_domain": "generic_domain",
+    "match_count": "match_count",
+    "match_count_with_hc": "match_count_with_hc",
+    "is_subscription_upgrade": "subscription_upgrade",
+    "upgrade_price": "upgrade_price",
+    "prorated_upgrade_price": "prorated_upgrade_price",
+    "create_in_cbx": "create_in_cbx",
+    "action": "action",
+    "index": "row_index",   # internal name we use
+}
+
 # Generic domains & generic company words
 GENERIC_DOMAINS = {
     "yahoo.ca", "yahoo.com", "hotmail.com", "gmail.com", "outlook.com",
@@ -804,51 +892,125 @@ def process_job(job_id: str, cbx_path: Path, hc_path: Path, config: MatchConfig)
         t0 = time.time()
         logger.info(f"[{job_id}] Starting processing")
 
+        # ---- Read CBX ----
         update_job(job_id, status="processing", message="Reading CBX...", progress=0.05)
-        t1 = time.time()
         if cbx_path.suffix.lower() in (".xlsx", ".xls"):
             cbx_df = pd.read_excel(cbx_path, engine="openpyxl")
         else:
             cbx_df = pd.read_csv(cbx_path)
-        logger.info(
-            f"[{job_id}] CBX read in {time.time()-t1:.2f}s ({len(cbx_df)} rows)"
-        )
+        logger.info(f"[{job_id}] CBX read ({len(cbx_df)} rows)")
 
+        # ---- Read HC ----
         update_job(job_id, message="Reading HC...", progress=0.10)
-        t1 = time.time()
         if hc_path.suffix.lower() in (".xlsx", ".xls"):
             hc_df = pd.read_excel(hc_path, engine="openpyxl")
         else:
             hc_df = pd.read_csv(hc_path)
-        logger.info(
-            f"[{job_id}] HC read in {time.time()-t1:.2f}s ({len(hc_df)} rows)"
-        )
+        logger.info(f"[{job_id}] HC read ({len(hc_df)} rows)")
 
+        # Drop completely empty rows (same spirit as legacy script)
+        cbx_df_clean = cbx_df.dropna(how="all").copy()
+        hc_df_clean = hc_df.dropna(how="all").copy()
+
+        # ---- Build matcher / index ----
         update_job(job_id, message="Building index...", progress=0.15)
-        t1 = time.time()
         matcher = ContractorMatcher(config)
-        matcher.build_cbx_index(cbx_df.dropna(how="all"))
-        logger.info(f"[{job_id}] Index built in {time.time()-t1:.2f}s")
+        matcher.build_cbx_index(cbx_df_clean)
 
-        total = len(hc_df)
+        total = len(hc_df_clean)
         update_job(job_id, message=f"Matching {total} records...", progress=0.20)
 
         def progress_cb(i: int):
-            p = 0.20 + 0.70 * (i / total)
-            update_job(job_id, progress=p, message=f"{i}/{total}")
+            if total:
+                p = 0.20 + 0.70 * (i / total)
+                update_job(job_id, progress=p, message=f"{i}/{total}")
 
-        t1 = time.time()
-        results = matcher.match_contractors(hc_df.dropna(how="all"), progress_cb)
-        logger.info(f"[{job_id}] Matching done in {time.time()-t1:.2f}s")
+        # ---- Matching ----
+        results = matcher.match_contractors(hc_df_clean, progress_cb)
+        logger.info(f"[{job_id}] Matching produced {len(results)} rows")
 
+        # ================================================================
+        #   Make the columns look like the legacy Excel ("all" sheet)
+        # ================================================================
+
+        # 1) Rename internal CBX fields -> legacy cbx_* fields
+        rename_map = {
+            "company": "cbx_contractor",
+            "address": "cbx_street",
+            "city": "cbx_city",
+            "state": "cbx_state",
+            "zip": "cbx_zip",
+            "country": "cbx_country",
+            "expiration_date": "cbx_expiration_date",
+            "email": "cbx_email",
+            "first_name": "cbx_first_name",
+            "last_name": "cbx_last_name",
+            "account_type": "cbx_account_type",
+            "subscription_price": "cbx_subscription_fee",
+            "employee_price": "cbx_employee_price",
+            "subscription_upgrade": "is_subscription_upgrade",
+            "row_index": "index",
+        }
+        rename_map = {k: v for k, v in rename_map.items() if k in results.columns}
+        results = results.rename(columns=rename_map)
+
+        # 2) Column ordering = HC columns first, then analysis headers in legacy order
+        hc_columns = list(hc_df_clean.columns)
+
+        analysis_headers = ANALYSIS_HEADERS  # from your constants at top
+
+        ordered_cols: list[str] = []
+
+        # a) All HC columns in original order
+        for col in hc_columns:
+            if col in results.columns and col not in ordered_cols:
+                ordered_cols.append(col)
+
+        # b) Legacy analysis headers in exact order
+        for col in analysis_headers:
+            if col in results.columns and col not in ordered_cols:
+                ordered_cols.append(col)
+
+        # c) Any leftover / debug columns at the end
+        for col in results.columns:
+            if col not in ordered_cols:
+                ordered_cols.append(col)
+
+        results = results.reindex(columns=ordered_cols)
+
+        # ---- Write Excel with legacy-like sheets ----
         update_job(job_id, progress=0.95, message="Saving...")
-        t1 = time.time()
         out_file = OUTPUT_DIR / f"{job_id}_results.xlsx"
-        with pd.ExcelWriter(out_file, engine="openpyxl") as writer:
-            results.to_excel(writer, sheet_name="Results", index=False)
-        logger.info(f"[{job_id}] Saved in {time.time()-t1:.2f}s")
 
-        logger.info(f"[{job_id}] TOTAL TIME: {time.time()-t0:.2f}s")
+        # IMPORTANT: make sure openpyxl is installed in your FastAPI env:
+        #   pip install openpyxl
+        with pd.ExcelWriter(out_file, engine="openpyxl", mode="w") as writer:
+            # Main sheet: legacy calls it "all"
+            results.to_excel(writer, sheet_name="all", index=False)
+
+            # Per-action sheets (same names as original script)
+            action_values = [
+                "onboarding",
+                "association_fee",
+                "re_onboarding",
+                "subscription_upgrade",
+                "ambiguous_onboarding",
+                "restore_suspended",
+                "activation_link",
+                "already_qualified",
+                "add_questionnaire",
+                "missing_info",
+                "follow_up_qualification",
+            ]
+
+            if "action" in results.columns:
+                for act in action_values:
+                    mask = results["action"] == act
+                    if mask.any():
+                        results.loc[mask].to_excel(writer, sheet_name=act, index=False)
+
+        logger.info(f"[{job_id}] Saved to {out_file}")
+
         update_job(
             job_id,
             status="completed",
@@ -860,6 +1022,8 @@ def process_job(job_id: str, cbx_path: Path, hc_path: Path, config: MatchConfig)
     except Exception as e:
         logger.exception(f"[{job_id}] FAILED")
         update_job(job_id, status="failed", message=str(e), error=str(e))
+
+
 
 
 # -------------------------------------------------------------------
