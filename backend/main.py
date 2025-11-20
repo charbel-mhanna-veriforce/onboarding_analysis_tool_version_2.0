@@ -40,6 +40,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 jobs: Dict[str, Dict[str, Any]] = {}
 
+
 def update_job(job_id: str, **kwargs):
     if job_id in jobs:
         jobs[job_id].update(kwargs)
@@ -136,21 +137,27 @@ INTERNAL_ANALYSIS_MAP = {
     "index": "row_index",   # internal name we use
 }
 
-# Generic domains & generic company words
-GENERIC_DOMAINS = {
+# EXACT copy of BASE_GENERIC_DOMAIN from legacy script
+GENERIC_DOMAINS_LIST = [
     "yahoo.ca", "yahoo.com", "hotmail.com", "gmail.com", "outlook.com",
     "bell.com", "bell.ca", "videotron.ca", "eastlink.ca", "kos.net", "bellnet.ca", "sasktel.net",
     "aol.com", "tlb.sympatico.ca", "sogetel.net", "cgocable.ca",
-    "hotmail.ca", "live.ca", "icloud.com", "hotmail.fr", "outlook.fr", "msn.com",
+    "hotmail.ca", "live.ca", "icloud.com", "hotmail.fr", "yahoo.com", "outlook.fr", "msn.com",
     "globetrotter.net", "live.com", "sympatico.ca", "live.fr", "yahoo.fr", "telus.net",
-    "shaw.ca", "me.com", "bell.net", "cablevision.qc.ca", "videotron.qc.ca",
-    "ivic.qc.ca", "qc.aira.com", "canada.ca", "axion.ca", "bellsouth.net",
-    "telusplanet.net", "rogers.com", "mymts.net", "nb.aibn.com", "on.aibn.com",
-    "nbnet.nb.ca", "execulink.com", "bellaliant.com", "nf.aibn.com",
-    "clintar.com", "pathcom.com", "oricom.ca", "mts.net",
-    "xplornet.com", "mcsnet.ca", "att.net", "ymail.com", "mail.com",
-    "bellaliant.net", "ns.sympatico.ca", "ns.aliantzinc.ca", "mnsi.net",
-}
+    "shaw.ca", "me.com", "bell.net", "cablevision.qc.ca", "live.ca", "tlb.sympatico.ca",
+    "", "videotron.qc.ca", "ivic.qc.ca", "qc.aira.com", "canada.ca", "axion.ca", "bellsouth.net",
+    "telusplanet.net", "rogers.com", "mymts.net", "nb.aibn.com", "on.aibn.com", "live.be",
+    "nbnet.nb.ca",
+    "execulink.com", "bellaliant.com", "nf.aibn.com", "clintar.com", "pathcom.com", "oricom.ca",
+    "mts.net",
+    "xplornet.com", "mcsnet.ca", "att.net", "ymail.com", "mail.com", "bellaliant.net",
+    "ns.sympatico.ca",
+    "ns.aliantzinc.ca", "mnsi.net"
+]
+
+# Use a set for fast membership while preserving the exact values from legacy
+GENERIC_DOMAINS = set(GENERIC_DOMAINS_LIST)
+
 
 GENERIC_COMPANY_NAME_WORDS = [
     "construction", "contracting", "industriel", "industriels", "service",
@@ -459,13 +466,15 @@ class MatchConfig(BaseModel):
 
 
 # -------------------------------------------------------------------
-# Matching engine with CBX logic
+# Matching engine with CBX logic (legacy-exact, FastAPI-friendly)
 # -------------------------------------------------------------------
 
 class ContractorMatcher:
     def __init__(self, config: MatchConfig):
         self.config = config
         self.cbx_data: Optional[pd.DataFrame] = None
+
+        # You can still keep indices for future optimizations if needed
         self.domain_index: Dict[str, list] = {}
         self.email_index: Dict[str, int] = {}
         self.company_index: Dict[str, list] = {}
@@ -474,7 +483,15 @@ class ContractorMatcher:
     def normalize_email(email: Any) -> str:
         if not email or pd.isna(email):
             return ""
-        return str(email).lower().strip().split(";")[0].split(",")[0].split("\n")[0].strip()
+        return (
+            str(email)
+            .lower()
+            .strip()
+            .split(";")[0]
+            .split(",")[0]
+            .split("\n")[0]
+            .strip()
+        )
 
     @staticmethod
     def get_domain(email: str) -> str:
@@ -503,24 +520,63 @@ class ContractorMatcher:
 
     def build_cbx_index(self, cbx_df: pd.DataFrame):
         """
-        Build fast lookup indices (domain, full email, company words).
+        Build CBX indices and normalized fields.
+        Ensures missing columns won't crash .apply().
         """
-        self.cbx_data = cbx_df
+        self.cbx_data = cbx_df.copy()
+
+        # ---- FIX: ensure required columns exist ----
+        required_cols = [
+            "email", "name_en", "name_fr", "postal_code", "address",
+            "country", "old_names", "hiring_client_names",
+            "hiring_client_qstatus", "modules", "parents",
+        ]
+        for col in required_cols:
+            if col not in self.cbx_data.columns:
+                self.cbx_data[col] = ""
+
+        # Precompute normalized fields
+        self.cbx_data["__email_norm"] = self.cbx_data["email"].apply(self.normalize_email)
+        self.cbx_data["__domain"] = self.cbx_data["__email_norm"].apply(self.get_domain)
+        self.cbx_data["__clean_name_en"] = self.cbx_data["name_en"].apply(self.clean_company_name)
+        self.cbx_data["__clean_name_fr"] = self.cbx_data["name_fr"].apply(self.clean_company_name)
+
+        self.cbx_data["__postal_no_space"] = (
+            self.cbx_data["postal_code"]
+            .astype(str)
+            .str.replace(" ", "")
+            .str.upper()
+        )
+
+        self.cbx_data["__address_clean"] = (
+            self.cbx_data["address"]
+            .astype(str)
+            .str.lower()
+            .str.replace(".", "", regex=False)
+            .str.strip()
+        )
+
+        self.cbx_data["__country_up"] = (
+            self.cbx_data["country"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        # Optional indices
         self.domain_index = defaultdict(list)
         self.email_index = {}
         self.company_index = defaultdict(list)
 
-        for idx, row in cbx_df.iterrows():
-            email = self.normalize_email(row.get("email", ""))
+        for idx, row in self.cbx_data.iterrows():
+            email = row["__email_norm"]
             if email:
-                domain = self.get_domain(email)
+                domain = row["__domain"]
                 self.email_index[email] = idx
                 if not self.is_generic_domain(domain):
                     self.domain_index[domain].append(idx)
 
-            clean_name = self.clean_company_name(row.get("name_en", "")) or self.clean_company_name(
-                row.get("name_fr", "")
-            )
+            clean_name = row["__clean_name_en"] or row["__clean_name_fr"]
             if clean_name:
                 for word in clean_name.split()[:3]:
                     if len(word) > 3:
@@ -530,7 +586,8 @@ class ContractorMatcher:
         self, hc_df: pd.DataFrame, progress_callback=None
     ) -> pd.DataFrame:
         """
-        Main matching logic: one row per HC contractor, enriched with CBX analysis + action.
+        Main matching logic: row-by-row, but using the exact same rules
+        as the legacy script. This ignores the indices for correctness.
         """
         results = []
         total = len(hc_df)
@@ -539,120 +596,71 @@ class ContractorMatcher:
             if progress_callback and idx % 10 == 0:
                 progress_callback(idx + 1)
 
-            # make a dict copy of HC row with NaN -> None
-            hc = {k: (None if pd.isna(v) else v) for k, v in hc_row.items()}
+            # Legacy: empty cells are '', not None
+            hc: Dict[str, Any] = {
+                k: ("" if pd.isna(v) else v) for k, v in hc_row.items()
+            }
 
-            hc_company_raw = hc.get("contractor_name") or ""
-            clean_hc_company = self.clean_company_name(hc_company_raw)
+            hc_company = hc.get("contractor_name", "")
+            clean_hc_company = self.clean_company_name(hc_company)
 
             hc_email = self.normalize_email(hc.get("contact_email", ""))
             hc_domain = self.get_domain(hc_email) if hc_email else ""
-            hc_zip = (str(hc.get("postal_code") or "")).replace(" ", "").upper()
-            hc_address = (
-                str(hc.get("address") or "").lower().replace(".", "").strip()
-            )
-            hc_force_cbx = str(hc.get("force_cbx_id") or "").strip()
+            hc_zip = str(hc.get("postal_code") or "").replace(" ", "").upper()
+            hc_address = str(hc.get("address") or "").lower().replace(".", "").strip()
+            hc_force_cbx = str(hc.get("force_cbx_id") or "")
+            hc_country = (str(hc.get("country_iso2") or "")).upper()
+
             do_not_match = smart_boolean(hc.get("do_not_match"))
+            matches: list[Dict[str, Any]] = []
 
-            hc_country = (str(hc.get("country_iso2") or "")).strip().upper()
-
-            matches = []
-
-            # Only attempt matching if not flagged "do not match"
             if not do_not_match:
+                # 1) FORCE CBX ID (same as legacy)
                 if hc_force_cbx:
-                    # Forced CBX id
                     forced = self.cbx_data[
                         self.cbx_data["id"].astype(str).str.strip() == hc_force_cbx
                     ]
                     if not forced.empty:
-                        cbx_series = forced.iloc[0]
+                        cbx_row = forced.iloc[0]
                         matches.append(
                             add_analysis_data(
-                                hc, cbx_series, ratio_company=None, ratio_address=None, contact_match=True
+                                hc,
+                                cbx_row,
+                                ratio_company=None,
+                                ratio_address=None,
+                                contact_match=True,
                             )
                         )
                 else:
-                    # Build candidates from indices
-                    candidates = set()
-
-                    if hc_email:
-                        if self.is_generic_domain(hc_domain):
-                            # generic domain -> full email equality
-                            idx_email = self.email_index.get(hc_email)
-                            if idx_email is not None:
-                                candidates.add(idx_email)
-                        else:
-                            # corporate domain -> domain match
-                            for cidx in self.domain_index.get(hc_domain, []):
-                                candidates.add(cidx)
-
-                    # company word index
-                    for word in clean_hc_company.split()[:3]:
-                        if len(word) > 3:
-                            for cidx in self.company_index.get(word, []):
-                                candidates.add(cidx)
-
-                    if not candidates:
-                        # Fallback: all CBX rows
-                        candidates = set(range(len(self.cbx_data)))
-
-                    for cbx_idx in candidates:
-                        cbx = self.cbx_data.iloc[cbx_idx]
-
+                    # 2) FULL SCAN OVER CBX (legacy behavior)
+                    for _, cbx in self.cbx_data.iterrows():
                         cbx_email = self.normalize_email(cbx.get("email", ""))
                         cbx_domain = self.get_domain(cbx_email) if cbx_email else ""
 
-                        contact_match = False
+                        # contact_match logic (identical to legacy)
                         if hc_email:
                             if self.is_generic_domain(hc_domain):
                                 contact_match = cbx_email == hc_email
                             else:
                                 contact_match = cbx_domain == hc_domain
+                        else:
+                            contact_match = False
 
                         cbx_zip = (str(cbx.get("postal_code") or "")).replace(
                             " ", ""
                         ).upper()
+                        cbx_company_en = self.clean_company_name(cbx.get("name_en", ""))
+                        cbx_company_fr = self.clean_company_name(cbx.get("name_fr", ""))
                         cbx_address = (
                             str(cbx.get("address") or "")
                             .lower()
                             .replace(".", "")
                             .strip()
                         )
-                        cbx_country = (str(cbx.get("country") or "")).strip().upper()
+                        cbx_country = (str(cbx.get("country") or "")).upper()
 
-                        cbx_name_en = self.clean_company_name(cbx.get("name_en", ""))
-                        cbx_name_fr = self.clean_company_name(cbx.get("name_fr", ""))
-
-                        # company ratio
-                        ratio_company_en = (
-                            fuzz.token_sort_ratio(cbx_name_en, clean_hc_company)
-                            if cbx_name_en or clean_hc_company
-                            else 0
-                        )
-                        ratio_company_fr = (
-                            fuzz.token_sort_ratio(cbx_name_fr, clean_hc_company)
-                            if cbx_name_fr or clean_hc_company
-                            else 0
-                        )
-                        ratio_company = max(ratio_company_en, ratio_company_fr)
-
-                        # previous names
-                        prev_names_str = cbx.get("old_names") or ""
-                        ratio_previous = 0
-                        if prev_names_str:
-                            for item in str(prev_names_str).split(LIST_SEPARATOR):
-                                item = self.clean_company_name(item)
-                                if not item:
-                                    continue
-                                r = fuzz.token_sort_ratio(item, clean_hc_company)
-                                if r > ratio_previous:
-                                    ratio_previous = r
-                        if ratio_previous > ratio_company:
-                            ratio_company = ratio_previous
-
-                        # address ratio
-                        if cbx_country and hc_country and cbx_country != hc_country:
+                        # --- Ratios (exact same formula as legacy) ---
+                        if cbx_country != hc_country:
                             ratio_zip = 0.0
                             ratio_address = 0.0
                         else:
@@ -666,19 +674,61 @@ class ContractorMatcher:
                                 if cbx_address and hc_address
                                 else 0.0
                             )
+
+                            # legacy combination logic:
                             if ratio_zip == 0:
                                 ratio_address = base_ratio_addr
                             elif base_ratio_addr == 0:
                                 ratio_address = ratio_zip
                             else:
-                                ratio_address = (
-                                    base_ratio_addr * ratio_zip / 100.0
-                                )
+                                ratio_address = base_ratio_addr * ratio_zip / 100.0
 
-                        # Accept candidate?
-                        if contact_match or ratio_company >= 95.0 or (
-                            ratio_company >= self.config.min_company_ratio
-                            and ratio_address >= self.config.min_address_ratio
+                        ratio_company_fr = (
+                            fuzz.token_sort_ratio(cbx_company_fr, clean_hc_company)
+                            if cbx_company_fr or clean_hc_company
+                            else 0
+                        )
+                        ratio_company_en = (
+                            fuzz.token_sort_ratio(cbx_company_en, clean_hc_company)
+                            if cbx_company_en or clean_hc_company
+                            else 0
+                        )
+                        ratio_company = (
+                            ratio_company_fr
+                            if ratio_company_fr > ratio_company_en
+                            else ratio_company_en
+                        )
+
+                        # previous names
+                        prev_names_str = cbx.get("old_names") or ""
+                        ratio_previous = 0
+                        if prev_names_str:
+                            for item in str(prev_names_str).split(LIST_SEPARATOR):
+                                if item in (
+                                    cbx.get("name_en", ""),
+                                    cbx.get("name_fr", ""),
+                                ):
+                                    # legacy skips if equal to main names
+                                    continue
+                                item_clean = self.clean_company_name(item)
+                                if not item_clean:
+                                    continue
+                                r = fuzz.token_sort_ratio(item_clean, clean_hc_company)
+                                if r > ratio_previous:
+                                    ratio_previous = r
+
+                        if ratio_previous > ratio_company:
+                            ratio_company = ratio_previous
+
+                        # --- legacy acceptance conditions ---
+                        if (
+                            contact_match
+                            or (
+                                ratio_company
+                                >= float(self.config.min_company_ratio)
+                                and ratio_address
+                                >= float(self.config.min_address_ratio)
+                            )
                         ):
                             matches.append(
                                 add_analysis_data(
@@ -689,6 +739,22 @@ class ContractorMatcher:
                                     contact_match=contact_match,
                                 )
                             )
+                        elif ratio_company >= 95.0 or (
+                            ratio_company >= float(self.config.min_company_ratio)
+                            and ratio_address
+                            >= float(self.config.min_address_ratio)
+                        ):
+                            matches.append(
+                                add_analysis_data(
+                                    hc,
+                                    cbx,
+                                    ratio_company=ratio_company,
+                                    ratio_address=ratio_address,
+                                    contact_match=contact_match,
+                                )
+                            )
+
+            # ======= Post-processing: identical to your current port (and legacy) =======
 
             # Filter out DO NOT USE entries
             matches = [
@@ -723,12 +789,12 @@ class ContractorMatcher:
                 if active_matches:
                     matches = active_matches
 
-            # Sort matches: modules, hiring_client_count, address, company
+            # Sort matches: modules, hiring_client_count, address, company (same as legacy)
             if matches:
                 matches = sorted(
                     matches,
                     key=lambda x: (
-                        str(x.get("modules") or ""),
+                        x.get("modules") or "",
                         x.get("hiring_client_count") or 0,
                         x.get("ratio_address") or 0,
                         x.get("ratio_company") or 0,
@@ -753,7 +819,7 @@ class ContractorMatcher:
                 matches[0]["analysis"] = analysis_str
 
             uniques_cbx_id = set(m["cbx_id"] for m in matches) if matches else set()
-            generic_domain_flag = bool(hc_domain.lower() in GENERIC_DOMAINS)
+            generic_domain_flag = hc_domain in GENERIC_DOMAINS
             match_count = len(uniques_cbx_id)
             match_count_with_hc = (
                 len([i for i in matches if (i.get("hiring_client_count") or 0) > 0])
@@ -761,7 +827,7 @@ class ContractorMatcher:
                 else 0
             )
 
-            # Start building final row
+            # Start building final row (HC + analysis)
             result_row: Dict[str, Any] = dict(hc)
 
             subscription_upgrade = False
@@ -776,13 +842,12 @@ class ContractorMatcher:
                     if key != "matched_qstatus":
                         result_row[key] = value
 
-                # Generic domain, counts, analysis summary
                 result_row["generic_domain"] = generic_domain_flag
                 result_row["match_count"] = match_count
                 result_row["match_count_with_hc"] = match_count_with_hc
                 result_row["analysis"] = analysis_str
 
-                # Subscription upgrade logic
+                # Subscription upgrade logic (same as legacy)
                 base_sub_raw = hc.get("base_subscription_fee")
                 if base_sub_raw in (None, "", 0):
                     base_subscription_fee = CBX_DEFAULT_STANDARD_SUBSCRIPTION
@@ -834,7 +899,9 @@ class ContractorMatcher:
                 ):
                     subscription_upgrade = True
                     if prorated_upgrade_price == 0:
-                        prorated_upgrade_price = upgrade_price or base_subscription_fee
+                        prorated_upgrade_price = (
+                            upgrade_price or base_subscription_fee
+                        )
 
             else:
                 # No matches -> still add analysis columns with empty CBX info
@@ -843,11 +910,11 @@ class ContractorMatcher:
                 result_row["match_count_with_hc"] = 0
                 result_row["analysis"] = analysis_str
 
-            # Create in CBX?
+            # Create in CBX? (same as legacy)
             ambiguous = smart_boolean(hc.get("ambiguous"))
             create_in_cbx = False if match_count and not ambiguous else True
 
-            # Decide action
+            # Decide action (same mapping as legacy `action`)
             if matches and uniques_cbx_id:
                 best = matches[0]
                 action_value = action_for_row(
@@ -859,7 +926,6 @@ class ContractorMatcher:
                     is_qualified=best.get("is_qualified", False),
                 )
             else:
-                # No match: treat as create path
                 action_value = action_for_row(
                     hc,
                     {},
@@ -870,7 +936,9 @@ class ContractorMatcher:
                 )
 
             result_row["subscription_upgrade"] = subscription_upgrade
-            result_row["upgrade_price"] = round(upgrade_price, 2) if upgrade_price else 0.0
+            result_row["upgrade_price"] = (
+                round(upgrade_price, 2) if upgrade_price else 0.0
+            )
             result_row["prorated_upgrade_price"] = (
                 round(prorated_upgrade_price, 2) if prorated_upgrade_price else 0.0
             )
@@ -982,8 +1050,7 @@ def process_job(job_id: str, cbx_path: Path, hc_path: Path, config: MatchConfig)
         update_job(job_id, progress=0.95, message="Saving...")
         out_file = OUTPUT_DIR / f"{job_id}_results.xlsx"
 
-        # IMPORTANT: make sure openpyxl is installed in your FastAPI env:
-        #   pip install openpyxl
+
         with pd.ExcelWriter(out_file, engine="openpyxl", mode="w") as writer:
             # Main sheet: legacy calls it "all"
             results.to_excel(writer, sheet_name="all", index=False)
