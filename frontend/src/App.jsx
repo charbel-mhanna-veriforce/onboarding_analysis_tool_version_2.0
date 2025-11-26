@@ -22,8 +22,7 @@ function App() {
   // Simple file states - NO pre-upload
   const [cbxFile, setCbxFile] = useState(null);
   const [hcFile, setHcFile] = useState(null);
-  const [minCompanyRatio, setMinCompanyRatio] = useState(80);
-  const [minAddressRatio, setMinAddressRatio] = useState(80);
+  // Matching ratios removed - backend uses legacy defaults (80/80)
 
   // Job states
   const [jobId, setJobId] = useState(null);
@@ -212,8 +211,7 @@ function App() {
       const formData = new FormData();
       formData.append('cbx_file', cbxFile);
       formData.append('hc_file', hcFile);
-      formData.append('min_company_ratio', String(minCompanyRatio));
-      formData.append('min_address_ratio', String(minAddressRatio));
+      // Matching ratios removed - backend uses legacy defaults (80/80)
 
       const response = await fetch(`${API_URL}/api/match`, {
         method: 'POST',
@@ -425,7 +423,7 @@ function App() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
                             <label className="block text-sm font-semibold text-slate-100 mb-3">
-                              CBX Database
+                              Hiring Client List
                             </label>
                             <div className="relative border-2 border-dashed border-slate-700 rounded-xl p-8 hover:border-sky-500 transition-all bg-slate-900">
                               <input
@@ -454,7 +452,7 @@ function App() {
 
                           <div>
                             <label className="block text-sm font-semibold text-slate-100 mb-3">
-                              Hiring Client List
+                              CBX Database
                             </label>
                             <div className="relative border-2 border-dashed border-slate-700 rounded-xl p-8 hover:border-sky-500 transition-all bg-slate-900">
                               <input
@@ -482,39 +480,11 @@ function App() {
                           </div>
                         </div>
 
-                        <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
-                          <h3 className="text-sm font-semibold text-slate-100 mb-4 flex items-center">
-                            <Settings className="h-4 w-4 mr-2 text-sky-400" />
-                            Matching Configuration
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                              <label className="block text-sm font-medium text-slate-200 mb-2">
-                                Company Match Threshold: {minCompanyRatio}%
-                              </label>
-                              <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={minCompanyRatio}
-                                onChange={e => setMinCompanyRatio(Number(e.target.value))}
-                                className="w-full accent-sky-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-slate-200 mb-2">
-                                Address Match Threshold: {minAddressRatio}%
-                              </label>
-                              <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={minAddressRatio}
-                                onChange={e => setMinAddressRatio(Number(e.target.value))}
-                                className="w-full accent-indigo-500"
-                              />
-                            </div>
-                          </div>
+                        <div className="bg-slate-900 rounded-xl p-4 border border-slate-700">
+                          <p className="text-sm text-slate-400 flex items-center">
+                            <Settings className="h-4 w-4 mr-2 text-slate-500" />
+                            Using legacy matching defaults: Company 80%, Address 80%
+                          </p>
                         </div>
 
                         {error && (

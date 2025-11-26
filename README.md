@@ -2,355 +2,430 @@
 
 ## 📋 Overview
 
-The **Onboarding Analysis Tool** is a powerful web application designed to match contractor records between two data sources: ComplyWorks (CBX) database and Hiring Client (HC) submissions. It automates the tedious process of identifying existing contractors and determining the appropriate onboarding actions.
-
-## 🎯 Purpose
-
-This tool helps organizations:
-- **Match contractors** across different databases using intelligent fuzzy matching
-- **Identify duplicate entries** to avoid redundant onboarding
-- **Determine actions** (onboarding, re-onboarding, add questionnaire, etc.)
-- **Process large datasets** efficiently with real-time progress tracking
-- **Generate actionable reports** with clear recommendations
+The **Onboarding Analysis Tool** is a powerful web application designed to match contractor records between Cognibox (CBX) database and Hiring Client (HC) submissions using advanced fuzzy matching algorithms. Built with React + FastAPI, it provides real-time progress tracking and generates comprehensive Excel reports.
 
 ## ✨ Key Features
 
-### 🔍 **Intelligent Matching Algorithm**
-- Fuzzy string matching for company names (English/French)
-- Address and postal code comparison
-- Email domain matching (corporate vs. personal)
-- Contact information verification
-- Historical name tracking (old company names)
+### 🔍 **Intelligent Matching**
+- **Fuzzy string matching** for company names (English/French support)
+- **Address validation** with postal code comparison
+- **Email domain matching** (corporate vs. personal email detection)
+- **Historical name tracking** (matches against previous company names)
+- **Contact verification** across multiple fields
+- **Generic domain filtering** (yahoo, gmail, hotmail, etc.)
 
-### ⚡ **Real-Time Processing**
-- Live progress bar showing percentage completion
-- Timer tracking processing duration
-- Record counter (X/Y processed)
-- Live console with detailed logging
-- Background processing with FastAPI
+### ⚡ **Real-Time Monitoring**
+- **Live progress bar** with percentage completion (0-100%)
+- **Timer display** showing elapsed processing time
+- **Record counter** (processed/total)
+- **Live console logs** with color-coded messages
+- **Background processing** with async job tracking
 
-### 📊 **Comprehensive Dashboard**
-- Statistics overview (total jobs, success rate, records processed)
-- Job history with filtering and search
-- Interactive logs viewer
-- Beautiful, modern UI with Tailwind CSS
+### 📊 **Comprehensive Reports**
+- **Excel output** with 12+ categorized sheets
+- **Action-based filtering** (onboarding, re-onboarding, etc.)
+- **Match analysis** with ratio scores
+- **Subscription upgrade calculations**
+- **Metadata preservation** from source files
 
-### 📁 **Flexible File Support**
-- **Input formats**: CSV, XLSX, XLS
-- **Output format**: Excel with multiple sheets
-- Handles large datasets (thousands of records)
-
-### 🎨 **Professional UI/UX**
-- Gradient color schemes
-- Animated transitions
-- Responsive design
+### 🎨 **Modern UI/UX**
+- Beautiful gradient design with purple/blue theme
+- Responsive layout for all screen sizes
+- Animated transitions and smooth interactions
 - Terminal-style live console
-- Intuitive navigation
+- Dashboard with statistics
 
 ## 🏗️ Architecture
 
 ```
-onboarding_analysis_tool_version_2.0/
-├── backend/                    # FastAPI Python backend
-│   ├── main.py                # Core matching logic & API
-│   ├── requirements.txt       # Python dependencies
-│   ├── test_progress.py       # Testing script
-│   ├── uploads/               # Temporary file storage
-│   └── outputs/               # Generated results
-│
-├── frontend/                   # React + Vite frontend
-│   ├── src/
-│   │   ├── App.jsx           # Main application component
-│   │   ├── main.jsx          # React entry point
-│   │   └── index.css         # Global styles + Tailwind
-│   ├── index.html            # HTML template
-│   ├── package.json          # Node dependencies
-│   ├── vite.config.js        # Vite configuration
-│   └── tailwind.config.js    # Tailwind configuration
-│
-└── docs/                      # Documentation (this folder)
+Frontend (React + Vite)          Backend (FastAPI + Python)
+┌─────────────────────┐         ┌─────────────────────────┐
+│  Upload Interface   │────────▶│  File Upload Handler    │
+│  Progress Tracker   │◀────────│  Background Jobs        │
+│  Live Console       │◀────────│  Matching Engine        │
+│  Download Manager   │◀────────│  Excel Generator        │
+└─────────────────────┘         └─────────────────────────┘
+         │                                   │
+         │                                   │
+    Port 5173                           Port 8000
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Python 3.8+** for backend
-- **Node.js 16+** for frontend
-- **pip** and **npm** package managers
+- **Python 3.8+** with pip
+- **Node.js 16+** with npm
+- **Modern web browser** (Chrome, Firefox, Edge)
 
 ### Installation
 
-1. **Clone the repository**
+**1. Clone the repository**
 ```bash
 git clone <repository-url>
 cd onboarding_analysis_tool_version_2.0
 ```
 
-2. **Setup Backend**
+**2. Install backend dependencies**
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-3. **Setup Frontend**
+**3. Install frontend dependencies**
 ```bash
-cd frontend
+cd ../frontend
 npm install
 ```
 
 ### Running the Application
 
-1. **Start Backend** (Terminal 1)
+#### Option 1: Quick Start (Two Terminals)
+
+**Terminal 1 - Backend:**
 ```bash
 cd backend
 python3 main.py
 ```
-Backend will run on: `http://localhost:8000`
+✅ Backend starts at `http://localhost:8000`
 
-2. **Start Frontend** (Terminal 2)
+**Terminal 2 - Frontend:**
 ```bash
 cd frontend
 npm run dev
 ```
-Frontend will run on: `http://localhost:5173`
+✅ Frontend starts at `http://localhost:5173`
 
-3. **Open Browser**
-Navigate to: `http://localhost:5173`
+**Open browser:** Navigate to `http://localhost:5173`
 
-## 📖 User Guide
+#### Option 2: Using Scripts (Linux/WSL)
 
-### Step 1: Upload Files
-1. Click on the **Upload** tab
-2. Select your **CBX file** (contractors database)
-3. Select your **HC file** (hiring client submissions)
-4. Adjust matching thresholds if needed (default: 80%)
+**Start backend:**
+```bash
+cd backend
+./start.sh
+```
 
-### Step 2: Start Processing
-1. Click **"Start Matching"** button
-2. Watch real-time progress in the progress bar
-3. Monitor the timer showing elapsed time
-4. View detailed logs in the live console at the bottom
+**Restart backend:**
+```bash
+cd backend
+./restart.sh
+```
+
+## 📖 How to Use
+
+### Step 1: Prepare Your Files
+
+**CBX File (Cognibox Database Export)**
+- Format: CSV, XLSX, or XLS
+- Required columns (28 total):
+  - `id`, `name_fr`, `name_en`, `old_names`
+  - `address`, `city`, `state`, `country`, `postal_code`
+  - `first_name`, `last_name`, `email`
+  - `cbx_expiration_date`, `registration_code`, `suspended`
+  - `modules`, `access_modes`, `code`
+  - `subscription_price_cad`, `employee_price_cad`
+  - `subscription_price_usd`, `employee_price_usd`
+  - `hiring_client_names`, `hiring_client_ids`, `hiring_client_qstatus`
+  - `parents`, `assessment_level`, `new_product`
+
+**HC File (Hiring Client Submissions)**
+- Format: CSV, XLSX, or XLS
+- Required columns (41 total):
+  - `contractor_name`, `contact_first_name`, `contact_last_name`, `contact_email`
+  - `contact_phone`, `contact_language`
+  - `address`, `city`, `province_state_iso2`, `country_iso2`, `postal_code`
+  - `category`, `description`, `phone`, `extension`, `fax`, `website`, `language`
+  - `is_take_over`, `qualification_expiration_date`, `qualification_status`
+  - `batch`, `questionnaire_name`, `questionnaire_id`
+  - `pricing_group_id`, `pricing_group_code`
+  - `hiring_client_name`, `hiring_client_id`
+  - `is_association_fee`, `base_subscription_fee`
+  - `contact_currency`, `agent_in_charge_id`
+  - `take_over_follow-up_date`, `renewal_date`
+  - `information_shared`, `contact_timezone`
+  - `do_not_match`, `force_cbx_id`, `ambiguous`
+  - `contractorcheck_account`, `assessment_level`
+
+### Step 2: Upload and Process
+
+1. **Open the application** at `http://localhost:5173`
+2. **Click "Upload" tab**
+3. **Select CBX file** (drag & drop or click to browse)
+4. **Select HC file** (drag & drop or click to browse)
+5. **Click "Start Matching"** button
+6. **Monitor progress:**
+   - Progress bar shows completion percentage
+   - Timer shows elapsed time
+   - Counter shows records processed
+   - Console displays detailed logs
 
 ### Step 3: Download Results
-1. Wait for processing to complete (status: "Processing Complete!")
-2. Click **"Download Results"** button
-3. Open the Excel file to see matched contractors
 
-### Step 4: Review Results
-The output Excel file contains multiple sheets:
-- **All Results**: Complete dataset with all matches
-- **Onboarding**: New contractors to onboard
-- **Add Questionnaire**: Existing contractors needing questionnaires
-- **Already Qualified**: Contractors already qualified
-- **Re-onboarding**: Inactive contractors to reactivate
-- And more action-specific sheets...
+1. Wait for **"Processing Complete!"** status
+2. Click **"Download Results"** button
+3. Open the Excel file in your preferred application
+
+### Step 4: Analyze Results
+
+**Output Excel File Contains:**
+
+1. **all** - Complete dataset with all matches and analysis
+2. **onboarding** - New contractors requiring onboarding
+3. **re_onboarding** - Inactive contractors to reactivate
+4. **add_questionnaire** - Active contractors needing questionnaires
+5. **already_qualified** - Contractors already validated
+6. **follow_up_qualification** - Contractors requiring follow-up
+7. **activation_link** - Contractors needing activation
+8. **ambiguous_onboarding** - Ambiguous matches requiring review
+9. **association_fee** - Contractors requiring association fees
+10. **subscription_upgrade** - Contractors requiring plan upgrades
+11. **restore_suspended** - Suspended accounts to restore
+12. **missing_info** - Incomplete submissions
+
+**Key Columns in Output:**
+- `cbx_id` - Matched Cognibox ID (blank if new)
+- `analysis` - Detailed match information with scores
+- `ratio_company` - Company name match score (0-100)
+- `ratio_address` - Address match score (0-100)
+- `contact_match` - Email/contact match (TRUE/FALSE)
+- `action` - Recommended action
+- `create_in_cbx` - Whether to create new record
+- `is_subscription_upgrade` - Upgrade required
+- `match_count` - Number of potential matches found
 
 ## 🔧 Configuration
 
-### Matching Thresholds
+### Matching Algorithm
 
-**Company Name Match Threshold** (default: 80%)
-- How similar company names must be to match
-- Higher = stricter matching
-- Lower = more matches but potential false positives
+The tool uses **legacy-tested matching logic** with the following rules:
 
-**Address Match Threshold** (default: 80%)
-- How similar addresses must be to match
-- Used in combination with company name matching
+**Company Name Matching:**
+- Compares against both French and English names
+- Checks historical/previous names
+- Removes generic words (inc, ltd, construction, etc.)
+- Uses fuzzy token sort ratio
+- **Default threshold: 80%**
 
-### API Configuration
+**Address Matching:**
+- Combines street address and postal code
+- Only compares within same country
+- Uses weighted combination of address and zip ratio
+- **Default threshold: 80%**
 
-Backend API URL is set in `frontend/src/App.jsx`:
-```javascript
-const API_URL = 'http://localhost:8000';
-```
+**Email Matching:**
+- For generic domains (gmail, yahoo, etc.): exact email match required
+- For corporate domains: domain-level match accepted
+- Helps avoid false positives
 
-Change this if deploying to a different host.
+**Priority Rules:**
+1. Forced matches (if `force_cbx_id` provided)
+2. Contact matches (email/domain)
+3. High company name ratio (≥95%) regardless of address
+4. Combined company + address threshold match
+5. Matches with hiring client relationship
+6. Active registration status preferred
+7. Higher module count preferred
 
-## 📊 Matching Algorithm
+### Custom Configuration
 
-### Matching Criteria (in priority order):
-
-1. **Email Domain Match** (Highest priority)
-   - Corporate domains: Match by domain
-   - Personal domains: Exact email match required
-
-2. **Company Name + Address**
-   - Fuzzy matching (English & French names)
-   - Old company names considered
-   - Address and postal code comparison
-
-3. **Hiring Client Relationship**
-   - Checks if contractor already works with this client
-
-### Action Determination:
-
-| Scenario | Action |
-|----------|--------|
-| No match found | Onboarding |
-| Match found + Active + In relationship | Already Qualified |
-| Match found + Active + New relationship | Add Questionnaire |
-| Match found + Suspended | Restore Suspended |
-| Match found + Inactive | Re-onboarding |
-| Takeover + Active | Add Questionnaire |
-| Takeover + Suspended | Restore Suspended |
+The matching thresholds are **hardcoded to legacy defaults (80/80)** for consistency with historical processing. These values have been tested and validated across thousands of contractor records.
 
 ## 🛠️ Development
 
-### Backend Technologies
-- **FastAPI**: Modern Python web framework
-- **Pandas**: Data manipulation
-- **RapidFuzz**: Fast fuzzy string matching
-- **Uvicorn**: ASGI server
-- **Pydantic**: Data validation
+### Backend Structure
 
-### Frontend Technologies
-- **React 18**: UI library
-- **Vite**: Build tool and dev server
-- **Tailwind CSS**: Utility-first CSS
-- **Lucide React**: Icon library
-
-### Project Structure
-
-**Backend (`main.py`)**:
-- `ContractorMatcher`: Core matching engine
-- `process_matching_job`: Background task processor
-- REST API endpoints for job management
-
-**Frontend (`App.jsx`)**:
-- Dashboard with statistics
-- Upload form with file handling
-- Real-time progress tracking
-- Job history management
-- Live console for logs
-
-## 🧪 Testing
-
-### Test Progress Tracking
-```bash
-cd backend
-python3 test_progress.py
+```python
+backend/
+├── main.py                 # Main FastAPI application
+├── convertTimeZone.py      # Timezone conversion utilities
+├── requirements.txt        # Python dependencies
+├── uploads/               # Temporary file storage
+└── outputs/               # Generated Excel files
 ```
 
-This script monitors a running job and displays real-time progress.
+**Key Dependencies:**
+- `fastapi` - Web framework
+- `uvicorn` - ASGI server
+- `openpyxl` - Excel file handling
+- `fuzzywuzzy` - Fuzzy string matching
+- `python-Levenshtein` - Fast string comparison
 
-### Manual Testing
-1. Use sample files from `backend/uploads/`
-2. Upload and process
-3. Verify output in `backend/outputs/`
-4. Check console logs for errors
+### Frontend Structure
 
-## 📈 Performance
+```javascript
+frontend/
+├── src/
+│   ├── App.jsx            # Main React component
+│   ├── main.jsx          # React entry point
+│   └── index.css         # Tailwind + custom styles
+├── index.html            # HTML template
+├── package.json          # Dependencies
+├── vite.config.js        # Vite configuration
+└── tailwind.config.js    # Tailwind configuration
+```
 
-- **Processing Speed**: ~10-50 records/second (depends on dataset size)
-- **Optimal Dataset**: 100-10,000 records
-- **Memory Usage**: ~200-500MB for typical datasets
-- **Concurrent Jobs**: Supports multiple simultaneous jobs
+**Key Dependencies:**
+- `react` - UI framework
+- `lucide-react` - Icon library
+- `tailwindcss` - CSS framework
+- `vite` - Build tool
+
+### API Endpoints
+
+**POST /api/match**
+- Uploads files and starts matching job
+- Returns: `job_id`, `status`, `progress`, `message`
+
+**GET /api/jobs/{job_id}**
+- Retrieves job status
+- Returns: Current progress, status, message, errors
+
+**GET /api/jobs/{job_id}/download**
+- Downloads completed Excel results
+- Returns: Excel file as attachment
+
+**GET /api/jobs**
+- Lists all jobs
+- Returns: Array of job statuses
+
+**GET /api/health**
+- Health check endpoint
+- Returns: System status
 
 ## 🐛 Troubleshooting
 
 ### Backend Issues
 
-**"Port 8000 already in use"**
+**Problem:** `ModuleNotFoundError: No module named 'fastapi'`
 ```bash
-# Find and kill process
-lsof -ti:8000 | xargs kill -9
+cd backend
+pip install -r requirements.txt
 ```
 
-**"Module not found"**
+**Problem:** Port 8000 already in use
 ```bash
-# Reinstall dependencies
-pip install -r requirements.txt
+# Find and kill process on port 8000
+lsof -i :8000
+kill -9 <PID>
+```
+
+**Problem:** Permission denied on start.sh
+```bash
+chmod +x start.sh restart.sh
 ```
 
 ### Frontend Issues
 
-**"npm command not found"**
+**Problem:** `ECONNREFUSED` backend connection error
+- Ensure backend is running on port 8000
+- Check CORS is enabled in backend
+
+**Problem:** Files not uploading
+- Check file size limits (backend default: unlimited)
+- Verify file format (CSV, XLSX, XLS)
+- Check browser console for errors
+
+**Problem:** Progress stuck at 0%
+- Check backend logs for processing errors
+- Verify file headers match expected format
+- Check backend console output
+
+### Common Data Issues
+
+**Problem:** No matches found
+- Verify file formats match expected headers
+- Check for encoding issues (use UTF-8)
+- Review company name cleaning logic
+
+**Problem:** Too many matches
+- Increase matching thresholds (requires code change)
+- Add more generic company words to filter
+
+**Problem:** Incorrect actions assigned
+- Review business logic in `action()` function
+- Check registration status values
+- Verify subscription pricing data
+
+## 📝 Testing
+
+### Manual Testing
+
+**1. Test with sample data:**
 ```bash
-# Install Node.js from https://nodejs.org/
+cd backend/testdata
+# Use cbx.csv and hc.csv for testing
 ```
 
-**"Port 5173 already in use"**
+**2. Run diagnostic test:**
 ```bash
-# Vite will automatically use next available port
+cd backend
+python test_diagnostic.py
 ```
 
-### Progress Bar Not Updating
+**3. Check background processing:**
+```bash
+cd backend
+python test_background.py
+```
 
-1. Check backend logs for "Progress Update" messages
-2. Open browser DevTools (F12) and check Console
-3. Verify API_URL is correct
-4. Check live console at bottom of page for poll logs
+### Integration Testing
 
-## 📝 Logging
+```bash
+cd backend
+python test_integration.py
+```
 
-### Backend Logs
-- Job start/completion with IDs
-- File loading progress
-- Record processing updates
-- Progress milestones (10%, 20%, etc.)
-- API request logging
+## 📊 Performance
 
-### Frontend Logs
-- Browser console (F12)
-- Live console in UI (bottom of page)
-- Logs tab for user-friendly view
+**Typical Processing Times:**
+- 100 contractors: ~30-60 seconds
+- 500 contractors: ~2-5 minutes
+- 1000 contractors: ~5-10 minutes
+- 5000 contractors: ~25-50 minutes
 
-## 🔐 Security Notes
+**Factors Affecting Speed:**
+- Number of CBX records (larger database = slower)
+- Number of HC records to process
+- File format (CSV faster than Excel)
+- System resources (CPU, RAM)
 
-- Files are temporarily stored in `backend/uploads/`
-- Results stored in `backend/outputs/`
-- No authentication implemented (add for production)
-- CORS enabled for localhost only
-- File uploads have no size limit (add for production)
+## 🔐 Security Considerations
 
-## 🚀 Deployment
-
-### Production Checklist
-- [ ] Add authentication/authorization
-- [ ] Set file upload size limits
-- [ ] Configure proper CORS origins
-- [ ] Use production database (not in-memory jobs dict)
-- [ ] Set up HTTPS/SSL
-- [ ] Configure environment variables
-- [ ] Add error tracking (Sentry, etc.)
-- [ ] Set up logging infrastructure
-- [ ] Implement rate limiting
-- [ ] Add file cleanup cron jobs
-
-## 🤝 Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Submit a pull request
-5. Update documentation
+- Files are stored temporarily in `uploads/` folder
+- Results stored in `outputs/` folder
+- No authentication implemented (internal use only)
+- Sensitive data should not be committed to git
+- Use `.gitignore` to exclude data files
 
 ## 📄 License
 
-[Add your license here]
+Internal use only. All rights reserved.
 
-## 👥 Authors
+## 👥 Support
 
-[Add authors/contributors here]
+For issues, questions, or feature requests:
+1. Check TROUBLESHOOTING.md
+2. Review backend logs in `backend.log`
+3. Check browser console for frontend errors
+4. Contact development team
 
-## 📞 Support
+## 🗺️ Roadmap
 
-For issues or questions:
-- Check the documentation in `/docs/`
-- Review the troubleshooting section
-- Contact the development team
-
-## 🎉 Acknowledgments
-
-- FastAPI team for the excellent framework
-- RapidFuzz for fast string matching
-- React and Vite teams for modern web tools
-- Tailwind CSS for the utility-first approach
+Potential future enhancements:
+- [ ] User authentication and multi-tenancy
+- [ ] Database storage for job history
+- [ ] Configurable matching thresholds via UI
+- [ ] Batch processing queue
+- [ ] Email notifications on completion
+- [ ] API rate limiting
+- [ ] Docker containerization
+- [ ] Export to multiple formats (CSV, JSON)
+- [ ] Advanced filtering and search in results
+- [ ] Audit trail and logging
 
 ---
 
-**Version**: 2.0.0  
-**Last Updated**: November 18, 2025  
-**Status**: Production Ready ✅
+**Version:** 2.0  
+**Last Updated:** November 2025  
+**Status:** Production Ready ✅
 
